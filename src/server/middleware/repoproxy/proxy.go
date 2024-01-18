@@ -296,6 +296,7 @@ func proxyManifestHead(ctx context.Context, w http.ResponseWriter, ctl proxy.Con
 	if err != nil {
 		return err
 	}
+	log.Debugf("proxyManifestHead manifest exist %#v desc %#v", exist, desc)
 	if !exist || desc == nil {
 		return errors.NotFoundError(fmt.Errorf("the tag %v:%v is not found", art.Repository, art.Tag))
 	}
@@ -304,6 +305,11 @@ func proxyManifestHead(ctx context.Context, w http.ResponseWriter, ctl proxy.Con
 		// Then GET the image by digest, in order to associate the tag with the digest
 		// Ensure tag after head request, make sure tags in proxy cache keep update
 		bCtx := orm.Context()
+		man, err := ctl.ProxyManifest(ctx, art, remote)
+		if err != nil {
+			log.Debugf("Failed to ensure proxy manifest %+v , error %v", art, err)
+		}
+		log.Debugf("proxyManifestHead manifest %#v", man)
 		for i := 0; i < ensureTagMaxRetry; i++ {
 			time.Sleep(ensureTagInterval)
 			bArt := lib.ArtifactInfo{ProjectName: art.ProjectName, Repository: art.Repository, Digest: string(desc.Digest)}

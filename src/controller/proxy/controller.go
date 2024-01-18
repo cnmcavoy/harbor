@@ -40,9 +40,9 @@ import (
 
 const (
 	// wait more time than manifest (maxManifestWait) because manifest list depends on manifest ready
-	maxManifestListWait = 20
-	maxManifestWait     = 10
-	sleepIntervalSec    = 20
+	maxManifestListWait = 3
+	maxManifestWait     = 3
+	sleepIntervalSec    = 1
 	// keep manifest list in cache for one week
 	manifestListCacheInterval = 7 * 24 * 60 * 60 * time.Second
 )
@@ -178,28 +178,32 @@ func (c *controller) UseLocalManifest(ctx context.Context, art lib.ArtifactInfo,
 		return false, nil, errors.NotFoundError(fmt.Errorf("repo %v, tag %v not found", art.Repository, art.Tag))
 	}
 
-	var content []byte
-	var contentType string
-	if c.cache == nil {
-		return a != nil && string(desc.Digest) == a.Digest, nil, nil // digest matches
-	}
+	return a != nil && string(desc.Digest) == a.Digest, nil, nil // digest matches
 
-	err = c.cache.Fetch(ctx, manifestListKey(art.Repository, art), &content)
-	if err != nil {
-		if errors.Is(err, cache.ErrNotFound) {
-			log.Debugf("Digest is not found in manifest list cache, key=cache:%v", manifestListKey(art.Repository, art))
-		} else {
-			log.Errorf("Failed to get manifest list from cache, error: %v", err)
+	/*
+		var content []byte
+		var contentType string
+		if c.cache == nil {
+			return a != nil && string(desc.Digest) == a.Digest, nil, nil // digest matches
 		}
-		return a != nil && string(desc.Digest) == a.Digest, nil, nil
-	}
-	err = c.cache.Fetch(ctx, manifestListContentTypeKey(art.Repository, art), &contentType)
-	if err != nil {
-		log.Debugf("failed to get the manifest list content type, not use local. error:%v", err)
-		return false, nil, nil
-	}
-	log.Debugf("Get the manifest list with key=cache:%v", manifestListKey(art.Repository, art))
-	return true, &ManifestList{content, string(desc.Digest), contentType}, nil
+
+		err = c.cache.Fetch(ctx, manifestListKey(art.Repository, art), &content)
+		if err != nil {
+			if errors.Is(err, cache.ErrNotFound) {
+				log.Debugf("Digest is not found in manifest list cache, key=cache:%v", manifestListKey(art.Repository, art))
+			} else {
+				log.Errorf("Failed to get manifest list from cache, error: %v", err)
+			}
+			return a != nil && string(desc.Digest) == a.Digest, nil, nil
+		}
+		err = c.cache.Fetch(ctx, manifestListContentTypeKey(art.Repository, art), &contentType)
+		if err != nil {
+			log.Debugf("failed to get the manifest list content type, not use local. error:%v", err)
+			return false, nil, nil
+		}
+		log.Debugf("Get the manifest list with key=cache:%v", manifestListKey(art.Repository, art))
+		return true, &ManifestList{content, string(desc.Digest), contentType}, nil
+	*/
 }
 
 func manifestListKey(repo string, art lib.ArtifactInfo) string {
@@ -231,17 +235,20 @@ func (c *controller) ProxyManifest(ctx context.Context, art lib.ArtifactInfo, re
 
 	// Push manifest in background
 	go func(operator string) {
+		log.Debugf("go func(%s)", operator)
 		bCtx := orm.Copy(ctx)
 		a, err := c.local.GetManifest(bCtx, art)
 		if err != nil {
 			log.Errorf("failed to get manifest, error %v", err)
 		}
+		log.Debugf("artifact is %#v", art)
 		// Push manifest to local when pull with digest, or artifact not found, or digest mismatch
 		if len(art.Tag) == 0 || a == nil || a.Digest != dig {
 			artInfo := art
 			if len(artInfo.Digest) == 0 {
 				artInfo.Digest = dig
 			}
+			log.Debugf("waitAndPushManifest %#v", artInfo)
 			c.waitAndPushManifest(bCtx, remoteRepo, man, artInfo, ct, remote)
 		}
 
